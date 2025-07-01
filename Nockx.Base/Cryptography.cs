@@ -17,6 +17,7 @@ namespace Nockx.Base;
 
 public static class Cryptography {
 	public const int AesKeyLength = 256;
+	internal static readonly BigInteger RsaKeyExponent = new ("10001", 16);
 
 	public static byte[] DecryptAesKey(byte[] encryptedAesKey, RsaKeyParameters rsaPrivateKey) {
     	OaepEncoding rsaEngine = new (new RsaEngine());
@@ -86,9 +87,9 @@ public static class Cryptography {
 		return aesKeyGen.GenerateKey();
 	}
 
-	public static (RsaKeyParameters, RsaKeyParameters) GenerateRsaKey() {
+	public static (RsaKeyParameters, RsaKeyParameters) GenerateRsaKey(string privateKeyFile = "private_key.pem", string publicKeyFile = "public_key.pem") {
 		RsaKeyPairGenerator rsaGenerator = new ();
-		rsaGenerator.Init(new RsaKeyGenerationParameters(new BigInteger("10001", 16), new SecureRandom(), 2048, 80));
+		rsaGenerator.Init(new RsaKeyGenerationParameters(RsaKeyExponent, new SecureRandom(), 2048, 80));
 			
 		AsymmetricCipherKeyPair keyPair = rsaGenerator.GenerateKeyPair();
 
@@ -96,19 +97,29 @@ public static class Cryptography {
 		RsaKeyParameters publicKey = (RsaKeyParameters) keyPair.Public;
 			
 		// Write private and public keys to files
-		using (TextWriter textWriter = new StreamWriter("private_key.pem")) {
+		using (TextWriter textWriter = new StreamWriter(privateKeyFile)) {
 			PemWriter pemWriter = new (textWriter);
 			pemWriter.WriteObject(privateKey);
 			pemWriter.Writer.Flush();
 		}
 
-		using (TextWriter textWriter = new StreamWriter("public_Key.pem")) {
+		using (TextWriter textWriter = new StreamWriter(publicKeyFile)) {
 			PemWriter pemWriter = new (textWriter);
 			pemWriter.WriteObject(publicKey);
 			pemWriter.Writer.Flush();
 		}
 		
 		return (privateKey, publicKey);
+	}
+
+	public static (RsaKeyParameters, RsaKeyParameters) ImportRsaKey(string file) {
+		RsaKeyParameters privateKey;
+		using (StreamReader reader = File.OpenText(file)) {
+			PemReader pemReader = new (reader);
+			privateKey = (RsaKeyParameters) ((AsymmetricCipherKeyPair) pemReader.ReadObject()).Private;
+		}
+
+		return (privateKey, new RsaKeyParameters(false, privateKey.Modulus, RsaKeyExponent));
 	}
 	
 	public static string Md5Hash(string input) => MD5.HashData(Encoding.Default.GetBytes(input)).Aggregate(new StringBuilder(), (sb, cur) => sb.Append(cur.ToString("x2"))).ToString();

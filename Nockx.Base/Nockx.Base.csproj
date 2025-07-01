@@ -4,7 +4,16 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <RootNamespace>NockxBase</RootNamespace>
+        <Version>0.1.0</Version>
+        <Authors>DemonExposer</Authors>
+        <Description>The underlying cryptography system for Nockx™</Description>
+        <RepositoryUrl>https://github.com/DemonExposer/Nockx.Base</RepositoryUrl>
+        <PackageLicenseExpression>LGPL-2.1</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/DemonExposer/Nockx.Base</PackageProjectUrl>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <Title>Nockx.Base</Title>
+        <Copyright>Copyright (c) 2025 DemonExposer</Copyright>
     </PropertyGroup>
 
     <ItemGroup>

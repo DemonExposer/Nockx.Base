@@ -8,7 +8,7 @@
         <Authors>DemonExposer</Authors>
         <Description>The underlying cryptography system for Nockx™</Description>
         <RepositoryUrl>https://github.com/DemonExposer/Nockx.Base</RepositoryUrl>
-        <PackageLicenseExpression>LGPL-2.1</PackageLicenseExpression>
+        <PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>
         <PackageProjectUrl>https://github.com/DemonExposer/Nockx.Base</PackageProjectUrl>
         <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
         <PackageReadmeFile>README.md</PackageReadmeFile>

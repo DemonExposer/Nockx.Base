@@ -4,7 +4,7 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <Version>0.1.0</Version>
+        <Version>0.1.1</Version>
         <Authors>DemonExposer</Authors>
         <Description>The underlying cryptography system for Nockx™</Description>
         <RepositoryUrl>https://github.com/DemonExposer/Nockx.Base</RepositoryUrl>
@@ -14,10 +14,12 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <Title>Nockx.Base</Title>
         <Copyright>Copyright (c) 2025 DemonExposer</Copyright>
+        <PackageIcon>nockx-logo.png</PackageIcon>
     </PropertyGroup>
 
     <ItemGroup>
         <None Include="..\README.md" Pack="true" PackagePath="" />
+        <None Include="..\nockx-logo.png" Pack="true" PackagePath="" />
     </ItemGroup>
 
     <ItemGroup>

@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using Nockx.Base.ClassExtensions;
+using Nockx.Base.Util;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Encodings;
@@ -152,5 +154,46 @@ public static class Cryptography {
 		verifier.BlockUpdate(textBytes, 0, textBytes.Length);
 
 		return verifier.VerifySignature(signatureBytes);
+	}
+	
+	// Here we get the more specific methods
+	
+	public static DecryptedMessage Decrypt(Message message, RsaKeyParameters privateKey, bool isOwnMessage) {
+		// Decrypt the AES key using RSA
+		byte[] aesKeyEncrypted = Convert.FromBase64String(isOwnMessage ? message.SenderEncryptedKey : message.ReceiverEncryptedKey);
+		
+		byte[] aesKey = DecryptAesKey(aesKeyEncrypted, privateKey);
+		
+		// Decrypt the message using AES
+		(byte[] plainBytes, int length) = DecryptWithAes(Convert.FromBase64String(message.Body), aesKey);
+
+		string body = Encoding.UTF8.GetString(plainBytes, 0, length);
+		return new DecryptedMessage { Id = message.Id, Body = body, Sender = message.Sender.ToBase64String(), DisplayName = message.SenderDisplayName, Timestamp = message.Timestamp};
+	}
+	
+	public static Message Encrypt(string inputText, RsaKeyParameters personalPublicKey, RsaKeyParameters foreignPublicKey, RsaKeyParameters privateKey) {
+		// Encrypt using AES
+		byte[] aesKey = GenerateAesKey();
+
+		byte[] plainBytes = Encoding.UTF8.GetBytes(inputText);
+		byte[] cipherBytes = EncryptWithAes(plainBytes, plainBytes.Length, aesKey);
+		
+		// Encrypt the AES key using RSA
+		byte[] personalEncryptedKey = EncryptAesKey(aesKey, personalPublicKey);
+		
+		byte[] foreignEncryptedKey = EncryptAesKey(aesKey, foreignPublicKey);
+
+		long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+		return new Message {
+			Body = Convert.ToBase64String(cipherBytes),
+			SenderEncryptedKey = Convert.ToBase64String(personalEncryptedKey),
+			ReceiverEncryptedKey = Convert.ToBase64String(foreignEncryptedKey),
+			Timestamp = timestamp,
+			Signature = Sign(inputText + timestamp, privateKey), // TODO: add receiver's key to this as well, so no forwarding can be done
+			Receiver = foreignPublicKey,
+			Sender = personalPublicKey,
+			SenderDisplayName = "",
+			ReceiverDisplayName = ""
+		};
 	}
 }

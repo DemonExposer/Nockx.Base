@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using Nockx.Base.ClassExtensions;
@@ -21,6 +22,51 @@ public static class Cryptography {
 	public const int AesKeyLength = 256;
 	internal static readonly BigInteger RsaKeyExponent = new ("10001", 16);
 
+	private static readonly ConditionalWeakTable<Stream, PaddedBufferedBlockCipher> StreamCiphers = [];
+	
+	// Extensions for Stream
+
+	public static int GetBlockSize(this Stream stream) {
+		if (!StreamCiphers.TryGetValue(stream, out PaddedBufferedBlockCipher? cipher))
+			throw new InvalidOperationException("Stream.SetAesKey has to be called before Stream.GetBlockSize");
+		
+		return cipher.GetBlockSize();
+	}
+	
+	public static byte[] ReadEncrypted(this Stream stream, int offset, int length) {
+		long bytesLeft = stream.Length - stream.Position;
+    	bool isFinal = bytesLeft <= length;
+    	
+    	if (!StreamCiphers.TryGetValue(stream, out PaddedBufferedBlockCipher? cipher))
+    		throw new InvalidOperationException("Stream.SetAesKey has to be called before Stream.ReadEncrypted");
+    	
+    	if (length % cipher.GetBlockSize() != 0 && !isFinal)
+    		throw new ArgumentOutOfRangeException(nameof(length), $"If {nameof(length)} is less than the number of remaining bytes in the stream, it must be a multiple of the cipher's block size ({cipher.GetBlockSize()})");
+    	
+    	byte[] buffer = new byte[length];
+    	int read = stream.Read(buffer, offset, length);
+
+	    if (read == 0)
+		    return [];
+
+    	byte[] cipherBytes = new byte[cipher.GetOutputSize(read)];
+    	int lengthEncrypted = cipher.ProcessBytes(buffer, 0, read, cipherBytes, 0);
+	    if (isFinal)
+		    lengthEncrypted += cipher.DoFinal(cipherBytes, lengthEncrypted);
+
+	    return cipherBytes[..lengthEncrypted];
+    }
+	
+	public static void SetAesKey(this Stream stream, byte[] aesKey) {
+		AesEngine aesEngine = new ();
+		PaddedBufferedBlockCipher cipher = new (new CbcBlockCipher(aesEngine), new Pkcs7Padding());
+		cipher.Init(true, new KeyParameter(aesKey));
+		
+		StreamCiphers.Add(stream, cipher);
+	}
+	
+	// End of extensions for Stream
+	
 	public static byte[] DecryptAesKey(byte[] encryptedAesKey, RsaKeyParameters rsaPrivateKey) {
     	OaepEncoding rsaEngine = new (new RsaEngine());
     	rsaEngine.Init(false, rsaPrivateKey);

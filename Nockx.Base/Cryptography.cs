@@ -38,6 +38,15 @@ public static class Cryptography {
 		return cipherPair.EncryptCipher.GetBlockSize();
 	}
 
+	public static long GetOutputLength(this Stream stream, bool forEncryption) {
+		if (!StreamCiphers.TryGetValue(stream, out CipherPair? cipherPair))
+			throw new InvalidOperationException("Stream.SetAesKey has to be called before Stream.GetBlockSize");
+		
+		return forEncryption 
+			? stream.Length - stream.Length % cipherPair.EncryptCipher.GetBlockSize() + cipherPair.EncryptCipher.GetBlockSize()
+			: stream.Length + cipherPair.DecryptCipher.GetBlockSize() - 1 - (stream.Length + cipherPair.DecryptCipher.GetBlockSize() - 1) % cipherPair.DecryptCipher.GetBlockSize();
+	}
+
 	/*
 	 * The choice to return a byte array instead of using a buffer was made because the output may be larger than the input.
 	 * Since the aim of this library is to make encryption and decryption as simple as possible, while still maintaining control,

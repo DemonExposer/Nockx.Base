@@ -3,10 +3,12 @@ namespace Nockx.Base;
 public class EncryptedStream : Stream {
 	private readonly List<byte> _surplus = [];
 	private readonly Stream _underlyingStream;
+	private readonly bool _forEncryption;
 
-	public EncryptedStream(Stream underlyingStream, byte[] aesKey) {
+	public EncryptedStream(Stream underlyingStream, byte[] aesKey, bool forEncryption) {
 		_underlyingStream = underlyingStream;
 		_underlyingStream.SetAesKey(aesKey);
+		_forEncryption = forEncryption;
 	}
 
 	public override void Flush() {
@@ -42,6 +44,6 @@ public class EncryptedStream : Stream {
 	public override bool CanRead { get; }
 	public override bool CanSeek { get; }
 	public override bool CanWrite { get; }
-	public override long Length { get; }
+	public override long Length { get => _underlyingStream.GetOutputLength(_forEncryption); }
 	public override long Position { get; set; }
 }

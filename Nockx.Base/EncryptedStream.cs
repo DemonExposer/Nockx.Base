@@ -15,17 +15,37 @@ public class EncryptedStream : Stream {
 		throw new NotImplementedException();
 	}
 		
-	public override int Read(byte[] buffer, int offset, int count) {
+	public override int Read(byte[] buffer, int offset, int count) => _forEncryption ? ReadEncrypted(buffer, offset, count) : ReadDecrypted(buffer, offset, count);
+
+	private int ReadDecrypted(byte[] buffer, int offset, int count) {
+		List<byte> decryptedBytes = new (_surplus);
+		_surplus.Clear();
+		while (decryptedBytes.Count < count && _underlyingStream.Position != _underlyingStream.Length) 
+			decryptedBytes.AddRange(_underlyingStream.ReadDecrypted(0, _underlyingStream.GetBlockSize())); // TODO: figure out what to do with offset here
+		
+		int read = Math.Min(count, decryptedBytes.Count);
+		Position += read;
+		
+		_surplus.AddRange(decryptedBytes[read..]);
+		
+		Buffer.BlockCopy(decryptedBytes.ToArray(), 0, buffer, offset, read);
+
+		return read;
+	}
+
+	private int ReadEncrypted(byte[] buffer, int offset, int count) {
 		List<byte> encryptedBytes = new (_surplus);
 		_surplus.Clear();
 		while (encryptedBytes.Count < count && _underlyingStream.Position != _underlyingStream.Length)
-			encryptedBytes.AddRange(_underlyingStream.ReadEncrypted(0, _underlyingStream.GetBlockSize()));
+			encryptedBytes.AddRange(_underlyingStream.ReadEncrypted(0, _underlyingStream.GetBlockSize())); // TODO: offset again
 
 		int read = Math.Min(count, encryptedBytes.Count);
+		Position += read;
 			
 		_surplus.AddRange(encryptedBytes[read..]);
 
 		Buffer.BlockCopy(encryptedBytes.ToArray(), 0, buffer, offset, read);
+
 		return read;
 	}
 		
@@ -40,10 +60,10 @@ public class EncryptedStream : Stream {
 	public override void Write(byte[] buffer, int offset, int count) {
 		throw new NotImplementedException();
 	}
-		
-	public override bool CanRead { get; }
-	public override bool CanSeek { get; }
-	public override bool CanWrite { get; }
-	public override long Length { get => _underlyingStream.GetOutputLength(_forEncryption); }
+	
+	public override bool CanRead => _underlyingStream.CanRead;
+	public override bool CanSeek => false;
+	public override bool CanWrite => false;
+	public override long Length => _underlyingStream.GetOutputLength(_forEncryption);
 	public override long Position { get; set; }
 }

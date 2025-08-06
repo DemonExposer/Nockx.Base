@@ -262,16 +262,16 @@ public static class Cryptography {
 	}
 	
 	public static Message Encrypt(string inputText, RsaKeyParameters personalPublicKey, RsaKeyParameters foreignPublicKey, RsaKeyParameters privateKey, byte[]? aesKeyIn = null, byte[]? aesKeyOut = null) {
-		if (aesKeyIn != null && aesKeyIn.Length != AesKeyLength)
-			throw new ArgumentException($"{nameof(aesKeyIn)} has to be of length {AesKeyLength}", nameof(aesKeyIn));
+		if (aesKeyIn != null && aesKeyIn.Length != AesKeyLength / 8)
+			throw new ArgumentException($"{nameof(aesKeyIn)} has to be of length {AesKeyLength / 8}", nameof(aesKeyIn));
 		
-		if (aesKeyOut != null && aesKeyOut.Length != AesKeyLength)
-			throw new ArgumentException($"{nameof(aesKeyOut)} has to be of length {AesKeyLength}", nameof(aesKeyOut));
+		if (aesKeyOut != null && aesKeyOut.Length != AesKeyLength / 8)
+			throw new ArgumentException($"{nameof(aesKeyOut)} has to be of length {AesKeyLength / 8}", nameof(aesKeyOut));
 		
 		// Encrypt using AES
 		byte[] aesKey = aesKeyIn ?? GenerateAesKey();
 		if (aesKeyOut != null)
-			Buffer.BlockCopy(aesKey, 0, aesKeyOut, 0, AesKeyLength);
+			Buffer.BlockCopy(aesKey, 0, aesKeyOut, 0, AesKeyLength / 8);
 
 		byte[] plainBytes = Encoding.UTF8.GetBytes(inputText);
 		byte[] cipherBytes = EncryptWithAes(plainBytes, plainBytes.Length, aesKey);

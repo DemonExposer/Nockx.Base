@@ -261,9 +261,17 @@ public static class Cryptography {
 		return new DecryptedMessage { Id = message.Id, Body = body, Sender = message.Sender.ToBase64String(), DisplayName = message.SenderDisplayName, Timestamp = message.Timestamp};
 	}
 	
-	public static Message Encrypt(string inputText, RsaKeyParameters personalPublicKey, RsaKeyParameters foreignPublicKey, RsaKeyParameters privateKey) {
+	public static Message Encrypt(string inputText, RsaKeyParameters personalPublicKey, RsaKeyParameters foreignPublicKey, RsaKeyParameters privateKey, byte[]? aesKeyIn = null, byte[]? aesKeyOut = null) {
+		if (aesKeyIn != null && aesKeyIn.Length != AesKeyLength)
+			throw new ArgumentException($"{nameof(aesKeyIn)} has to be of length {AesKeyLength}", nameof(aesKeyIn));
+		
+		if (aesKeyOut != null && aesKeyOut.Length != AesKeyLength)
+			throw new ArgumentException($"{nameof(aesKeyOut)} has to be of length {AesKeyLength}", nameof(aesKeyOut));
+		
 		// Encrypt using AES
-		byte[] aesKey = GenerateAesKey();
+		byte[] aesKey = aesKeyIn ?? GenerateAesKey();
+		if (aesKeyOut != null)
+			Buffer.BlockCopy(aesKey, 0, aesKeyOut, 0, AesKeyLength);
 
 		byte[] plainBytes = Encoding.UTF8.GetBytes(inputText);
 		byte[] cipherBytes = EncryptWithAes(plainBytes, plainBytes.Length, aesKey);

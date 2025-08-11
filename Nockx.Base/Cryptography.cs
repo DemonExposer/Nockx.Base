@@ -288,10 +288,8 @@ public static class Cryptography {
 			ReceiverEncryptedKey = Convert.ToBase64String(foreignEncryptedKey),
 			Timestamp = timestamp,
 			Signature = Sign(inputText + timestamp, privateKey), // TODO: add receiver's key to this as well, so no forwarding can be done
-			Receiver = foreignPublicKey,
 			Sender = personalPublicKey,
-			SenderDisplayName = "",
-			ReceiverDisplayName = ""
+			SenderDisplayName = ""
 		};
 	}
 }

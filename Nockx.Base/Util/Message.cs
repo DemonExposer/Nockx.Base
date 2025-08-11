@@ -5,9 +5,9 @@ using Org.BouncyCastle.Crypto.Parameters;
 namespace Nockx.Base.Util;
 
 public class Message {
-	public long Id, Timestamp;
-	public string Body, ReceiverEncryptedKey, SenderEncryptedKey, Signature, SenderDisplayName, ReceiverDisplayName;
-	public RsaKeyParameters Sender, Receiver;
+	public long Id, ChatId, Timestamp;
+	public string Body, ReceiverEncryptedKey, SenderEncryptedKey, Signature, SenderDisplayName;
+	public RsaKeyParameters Sender;
 	public bool IsRead;
 	
 	public static Message Parse(JsonObject jsonMessage) {
@@ -15,15 +15,14 @@ public class Message {
 		try {
 			message = new Message {
 				Id = jsonMessage["id"]!.GetValue<long>(),
+				ChatId = jsonMessage["chatId"]!.GetValue<long>(),
 				Body = jsonMessage["text"]!.GetValue<string>(),
 				ReceiverEncryptedKey = jsonMessage["receiverEncryptedKey"]!.GetValue<string>(),
 				SenderEncryptedKey = jsonMessage["senderEncryptedKey"]?.GetValue<string>(),
 				Timestamp = jsonMessage["timestamp"]!.GetValue<long>(),
 				Signature = jsonMessage["signature"]!.GetValue<string>(),
 				Sender = RsaKeyParametersExtension.FromBase64String(jsonMessage["sender"]!["key"]!.GetValue<string>()),
-				Receiver = jsonMessage["receiver"] == null ? null : RsaKeyParametersExtension.FromBase64String(jsonMessage["receiver"]!["key"]!.GetValue<string>()),
 				SenderDisplayName = jsonMessage["sender"]!["displayName"]!.GetValue<string>(),
-				ReceiverDisplayName = jsonMessage["receiver"]!["displayName"]!.GetValue<string>(),
 				IsRead = jsonMessage["isRead"]!.GetValue<bool>()
 			};
 		} catch (Exception e) { // TODO: make this better. currently this is just easy for identifying issues between client and server
@@ -31,6 +30,8 @@ public class Message {
 			
 			if (jsonMessage["id"] == null)
 				Console.WriteLine("id null");
+			if (jsonMessage["chatId"] == null)
+				Console.WriteLine("chatId null");
 			if (jsonMessage["text"] == null)
 				Console.WriteLine("text null");
 			if (jsonMessage["receiverEncryptedKey"] == null)
@@ -43,8 +44,6 @@ public class Message {
 				Console.WriteLine("signature null");
 			if (jsonMessage["sender"] == null)
 				Console.WriteLine("sender null");
-			if (jsonMessage["receiver"] == null)
-				Console.WriteLine("receiver null");
 			if (jsonMessage["isRead"] == null)
 				Console.WriteLine("isRead null");
 			

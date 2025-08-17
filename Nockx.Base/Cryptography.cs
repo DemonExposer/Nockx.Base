@@ -287,7 +287,7 @@ public static class Cryptography {
 			SenderEncryptedKey = Convert.ToBase64String(personalEncryptedKey),
 			ReceiverEncryptedKey = Convert.ToBase64String(foreignEncryptedKey),
 			Timestamp = timestamp,
-			Signature = Sign(inputText + timestamp, privateKey), // TODO: add receiver's key to this as well, so no forwarding can be done
+			Signature = Sign(inputText + timestamp, privateKey), // TODO: add receiver's key to this as well, so no forwarding can be done. MORE IMPORTANTLY, ADD THE AES KEY, THIS IS A SECURITY VULNERABILITY
 			Sender = personalPublicKey,
 			SenderDisplayName = ""
 		};

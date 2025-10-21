@@ -125,12 +125,12 @@ public static class Cryptography {
 		Buffer.BlockCopy(input, encryptedAesKey.Length, cipherBytes, 0, cipherBytes.Length);
 
 		byte[] aesKey = DecryptAesKey(encryptedAesKey, privateKey);
-		(byte[] plainBytes, int length) = DecryptWithAes(cipherBytes, aesKey);
+		byte[] plainBytes = DecryptWithAes(cipherBytes, aesKey);
 		
-		return plainBytes[..length];
+		return plainBytes;
 	}
 	
-	public static (byte[] plainBytes, int length) DecryptWithAes(byte[] data, byte[] aesKey) {
+	public static byte[] DecryptWithAes(byte[] data, byte[] aesKey) {
 		AesEngine aesEngine = new ();
 		PaddedBufferedBlockCipher cipher = new (new CbcBlockCipher(aesEngine), new Pkcs7Padding());
 		cipher.Init(false, new KeyParameter(aesKey));
@@ -139,7 +139,7 @@ public static class Cryptography {
 		int length = cipher.ProcessBytes(data, 0, data.Length, plainBytes, 0);
 		length += cipher.DoFinal(plainBytes, length);
 
-		return (plainBytes, length);
+		return plainBytes[..length];
 	}
 
 	public static byte[] EncryptAesKey(byte[] aesKey, RsaKeyParameters rsaPublicKey) {
@@ -255,9 +255,9 @@ public static class Cryptography {
 		byte[] aesKey = DecryptAesKey(aesKeyEncrypted, privateKey);
 		
 		// Decrypt the message using AES
-		(byte[] plainBytes, int length) = DecryptWithAes(Convert.FromBase64String(message.Body), aesKey);
+		byte[] plainBytes = DecryptWithAes(Convert.FromBase64String(message.Body), aesKey);
 
-		string body = Encoding.UTF8.GetString(plainBytes, 0, length);
+		string body = Encoding.UTF8.GetString(plainBytes, 0, plainBytes.Length);
 		return new DecryptedMessage { Id = message.Id, Body = body, Sender = message.Sender.ToBase64String(), DisplayName = message.SenderDisplayName, Timestamp = message.Timestamp};
 	}
 	
@@ -287,7 +287,7 @@ public static class Cryptography {
 			SenderEncryptedKey = Convert.ToBase64String(personalEncryptedKey),
 			ReceiverEncryptedKey = Convert.ToBase64String(foreignEncryptedKey),
 			Timestamp = timestamp,
-			Signature = Sign(inputText + timestamp, privateKey), // TODO: add receiver's key to this as well, so no forwarding can be done. MORE IMPORTANTLY, ADD THE AES KEY, THIS IS A SECURITY VULNERABILITY
+			Signature = Sign(inputText + Convert.ToBase64String(aesKey) + foreignPublicKey.ToBase64String() + timestamp, privateKey),
 			Sender = personalPublicKey,
 			SenderDisplayName = ""
 		};

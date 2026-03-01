@@ -33,7 +33,7 @@ unsigned char generate_key(const char *key_type) {
 	}
 	fclose(file);
 
-	file = fopen((key_type_str + std::string("_private_key.pem")).c_str(), "w");
+	file = fopen((key_type_str + std::string("_public_key.pem")).c_str(), "w");
 	if (!file) {
 		perror("fopen");
 		return 0;

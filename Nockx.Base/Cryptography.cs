@@ -1,121 +1,49 @@
-using System.Runtime.CompilerServices;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using Nockx.Base.ClassExtensions;
+using Nockx.Base.CryptographyTypes;
 using Nockx.Base.Util;
 using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Digests;
-using Org.BouncyCastle.Crypto.Encodings;
-using Org.BouncyCastle.Crypto.Engines;
-using Org.BouncyCastle.Crypto.Generators;
-using Org.BouncyCastle.Crypto.Modes;
-using Org.BouncyCastle.Crypto.Paddings;
 using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.Crypto.Signers;
-using Org.BouncyCastle.Math;
 using Org.BouncyCastle.OpenSsl;
-using Org.BouncyCastle.Security;
 
 namespace Nockx.Base;
 
 public static class Cryptography {
+	public const string MlKem768 = "ML-KEM-768";
+	public const string MlDsa65 = "ML-DSA-65";
+	public const string Rsa = "RSA";
+
+	internal const string CppLib = "libnockx-base";
+	
 	public const int AesKeyLength = 256;
-	internal static readonly BigInteger RsaKeyExponent = new ("10001", 16);
 
-	private class CipherPair {
-		public required PaddedBufferedBlockCipher EncryptCipher;
-		public required PaddedBufferedBlockCipher DecryptCipher;
+	static Cryptography() {
+		NativeLibrary.SetDllImportResolver(Assembly.GetExecutingAssembly(), (libName, assembly, searchPath) => {
+			if (libName == CppLib) {
+				if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+					return NativeLibrary.Load($"{CppLib}.dylib", assembly, searchPath);
+				if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+					return NativeLibrary.Load($"{CppLib}.dll", assembly, searchPath);
+				
+				return NativeLibrary.Load($"{CppLib}.so", assembly, searchPath);
+			}
+			
+			return IntPtr.Zero;
+		});
 	}
 	
-	private static readonly ConditionalWeakTable<Stream, CipherPair> StreamCiphers = [];
+	public static bool GenerateKey(string keyType) => MlKemCryptography.GenerateKey(keyType);
+
+	public static KeyPair ReadKeyFromFile(string fileName, string keyType) => MlKemCryptography.ReadKeyFromFile(fileName, keyType);
 	
-	// Extensions for Stream
-
-	public static int GetBlockSize(this Stream stream) {
-		if (!StreamCiphers.TryGetValue(stream, out CipherPair? cipherPair))
-			throw new InvalidOperationException("Stream.SetAesKey has to be called before Stream.GetBlockSize");
-		
-		return cipherPair.EncryptCipher.GetBlockSize();
-	}
-
-	public static long GetOutputLength(this Stream stream, bool forEncryption) {
-		if (!StreamCiphers.TryGetValue(stream, out CipherPair? cipherPair))
-			throw new InvalidOperationException("Stream.SetAesKey has to be called before Stream.GetBlockSize");
-		
-		return forEncryption 
-			? stream.Length - stream.Length % cipherPair.EncryptCipher.GetBlockSize() + cipherPair.EncryptCipher.GetBlockSize()
-			: stream.Length + cipherPair.DecryptCipher.GetBlockSize() - 1 - (stream.Length + cipherPair.DecryptCipher.GetBlockSize() - 1) % cipherPair.DecryptCipher.GetBlockSize();
-	}
-
-	/*
-	 * The choice to return a byte array instead of using a buffer was made because the output may be larger than the input.
-	 * Since the aim of this library is to make encryption and decryption as simple as possible, while still maintaining control,
-	 * the user shouldn't have to calculate output array sizes and slice them afterwards themselves, as is done in this method.
-	 */
-	public static byte[] ReadDecrypted(this Stream stream, int offset, int length) {
-		long bytesLeft = stream.Length - stream.Position;
-		bool isFinal = bytesLeft <= length;
-    	
-		if (!StreamCiphers.TryGetValue(stream, out CipherPair? cipherPair))
-			throw new InvalidOperationException("Stream.SetAesKey has to be called before Stream.ReadDecrypted");
-    	
-		if (length % cipherPair.DecryptCipher.GetBlockSize() != 0)
-			throw new ArgumentOutOfRangeException(nameof(length), $"{nameof(length)} must be a multiple of the cipher's block size ({cipherPair.DecryptCipher.GetBlockSize()})");
-		
-		byte[] buffer = new byte[length];
-		int read = stream.Read(buffer, offset, length);
-
-		if (read == 0)
-			return [];
-
-		byte[] plainBytes = new byte[isFinal ? cipherPair.DecryptCipher.GetOutputSize(read) : cipherPair.DecryptCipher.GetUpdateOutputSize(read)];
-		int lengthDecrypted = cipherPair.DecryptCipher.ProcessBytes(buffer, 0, read, plainBytes, 0);
-		if (isFinal)
-			lengthDecrypted += cipherPair.DecryptCipher.DoFinal(plainBytes, lengthDecrypted);
-
-		return plainBytes[..lengthDecrypted];
-	}
+	public static byte[] ReadPublicKeyFromString(string input, string keyType) =>  MlKemCryptography.ReadPublicKeyFromString(input, keyType);
 	
-	public static byte[] ReadEncrypted(this Stream stream, int offset, int length) {
-    	bool isFinal = stream.Length - stream.Position <= length;
-    	
-    	if (!StreamCiphers.TryGetValue(stream, out CipherPair? cipherPair))
-    		throw new InvalidOperationException("Stream.SetAesKey has to be called before Stream.ReadEncrypted");
-    	
-    	if (length % cipherPair.EncryptCipher.GetBlockSize() != 0 && !isFinal)
-    		throw new ArgumentOutOfRangeException(nameof(length), $"If {nameof(length)} is less than the number of remaining bytes in the stream, it must be a multiple of the cipher's block size ({cipherPair.EncryptCipher.GetBlockSize()})");
-    	
-    	byte[] buffer = new byte[length];
-    	int read = stream.Read(buffer, offset, length);
-
-	    if (read == 0)
-		    return [];
-
-    	byte[] cipherBytes = new byte[isFinal ? cipherPair.EncryptCipher.GetOutputSize(read) : cipherPair.EncryptCipher.GetUpdateOutputSize(read)];
-    	int lengthEncrypted = cipherPair.EncryptCipher.ProcessBytes(buffer, 0, read, cipherBytes, 0);
-	    if (isFinal)
-		    lengthEncrypted += cipherPair.EncryptCipher.DoFinal(cipherBytes, lengthEncrypted);
-
-	    return cipherBytes[..lengthEncrypted];
-    }
+	public static byte[] EncryptAesKeyWithMlKem(byte[] aesKey, byte[] publicKemKey) => MlKemCryptography.EncryptAesKey(aesKey, publicKemKey);
 	
-	public static void SetAesKey(this Stream stream, byte[] aesKey) {
-		PaddedBufferedBlockCipher encryptCipher = new (new CbcBlockCipher(new AesEngine()), new Pkcs7Padding());
-		encryptCipher.Init(true, new KeyParameter(aesKey));
-		
-		PaddedBufferedBlockCipher decryptCipher = new (new CbcBlockCipher(new AesEngine()), new Pkcs7Padding());
-		decryptCipher.Init(false, new KeyParameter(aesKey));
-		
-		StreamCiphers.Add(stream, new  CipherPair { EncryptCipher = encryptCipher, DecryptCipher = decryptCipher });
-	}
-	
-	// End of extensions for Stream
-	
-	public static byte[] DecryptAesKey(byte[] encryptedAesKey, RsaKeyParameters rsaPrivateKey) {
-    	OaepEncoding rsaEngine = new (new RsaEngine());
-    	rsaEngine.Init(false, rsaPrivateKey);
-    	return rsaEngine.ProcessBlock(encryptedAesKey, 0, encryptedAesKey.Length);
-    }
+	public static byte[] DecryptAesKeyWithMlKem(byte[] ciphertext, byte[] privateKemKey) => MlKemCryptography.DecryptAesKey(ciphertext, privateKemKey);
 	
 	public static byte[] DecryptBytes(byte[] input, RsaKeyParameters privateKey) {
 		byte[] encryptedAesKey = new byte[AesKeyLength];
@@ -124,84 +52,39 @@ public static class Cryptography {
 		Buffer.BlockCopy(input, 0, encryptedAesKey, 0, encryptedAesKey.Length);
 		Buffer.BlockCopy(input, encryptedAesKey.Length, cipherBytes, 0, cipherBytes.Length);
 
-		byte[] aesKey = DecryptAesKey(encryptedAesKey, privateKey);
+		byte[] aesKey = DecryptAesKeyWithRsa(encryptedAesKey, privateKey);
 		byte[] plainBytes = DecryptWithAes(cipherBytes, aesKey);
 		
 		return plainBytes;
 	}
 	
-	public static byte[] DecryptWithAes(byte[] data, byte[] aesKey) {
-		AesEngine aesEngine = new ();
-		PaddedBufferedBlockCipher cipher = new (new CbcBlockCipher(aesEngine), new Pkcs7Padding());
-		cipher.Init(false, new KeyParameter(aesKey));
-		
-		byte[] plainBytes = new byte[cipher.GetOutputSize(data.Length)];
-		int length = cipher.ProcessBytes(data, 0, data.Length, plainBytes, 0);
-		length += cipher.DoFinal(plainBytes, length);
+	public static byte[] GenerateAesKey() => AesCryptography.GenerateKey();
+	
+	public static byte[] EncryptWithAes(byte[] data, int inputLength, byte[] aesKey) => AesCryptography.Encrypt(data, inputLength, aesKey);
+	
+	public static byte[] DecryptWithAes(byte[] data, byte[] aesKey) => AesCryptography.Decrypt(data, aesKey);
 
-		return plainBytes[..length];
-	}
+	public static (RsaKeyParameters, RsaKeyParameters) GenerateRsaKey(string privateKeyFile = "private_key.pem", string publicKeyFile = "public_key.pem") => RsaCryptography.GenerateKey(privateKeyFile, publicKeyFile);
+	
+	public static byte[] EncryptAesKeyWithRsa(byte[] aesKey, RsaKeyParameters rsaPublicKey) => RsaCryptography.EncryptAesKey(aesKey, rsaPublicKey);
+	
+	public static byte[] DecryptAesKeyWithRsa(byte[] encryptedAesKey, RsaKeyParameters rsaPrivateKey) => RsaCryptography.DecryptAesKey(encryptedAesKey, rsaPrivateKey);
+	
+	public static string SignWithRsa(string text, RsaKeyParameters privateKey) => RsaCryptography.Sign(text, privateKey);
 
-	public static byte[] EncryptAesKey(byte[] aesKey, RsaKeyParameters rsaPublicKey) {
-		OaepEncoding rsaEngine = new (new RsaEngine());
-		rsaEngine.Init(true, rsaPublicKey);
-		return rsaEngine.ProcessBlock(aesKey, 0, aesKey.Length);
-	}
+	public static bool VerifyWithRsa(string text, string signature, RsaKeyParameters? personalPublicKey, RsaKeyParameters? foreignPublicKey, bool isOwnMessage) => RsaCryptography.Verify(text, signature, personalPublicKey, foreignPublicKey, isOwnMessage);
 
 	public static byte[] EncryptBytes(byte[] input, RsaKeyParameters foreignPublicKey) {
 		byte[] aesKey = GenerateAesKey();
 
 		byte[] cipherBytes = EncryptWithAes(input, input.Length, aesKey);
-		byte[] encryptedAesKey = EncryptAesKey(aesKey, foreignPublicKey);
+		byte[] encryptedAesKey = EncryptAesKeyWithRsa(aesKey, foreignPublicKey);
 
 		byte[] output = new byte[encryptedAesKey.Length + cipherBytes.Length];
 		Buffer.BlockCopy(encryptedAesKey, 0, output, 0, encryptedAesKey.Length);
 		Buffer.BlockCopy(cipherBytes, 0, output, encryptedAesKey.Length, cipherBytes.Length);
 		
 		return output;
-	}
-
-	public static byte[] EncryptWithAes(byte[] data, int inputLength, byte[] aesKey) {
-		AesEngine aesEngine = new ();
-		PaddedBufferedBlockCipher cipher = new (new CbcBlockCipher(aesEngine), new Pkcs7Padding());
-		cipher.Init(true, new KeyParameter(aesKey));
-		
-		byte[] cipherBytes = new byte[cipher.GetOutputSize(inputLength)];
-		int length = cipher.ProcessBytes(data, 0, inputLength, cipherBytes, 0);
-		length += cipher.DoFinal(cipherBytes, length);
-
-		return cipherBytes;
-	}
-	
-	public static byte[] GenerateAesKey() {
-		CipherKeyGenerator aesKeyGen = new ();
-		aesKeyGen.Init(new KeyGenerationParameters(new SecureRandom(), AesKeyLength));
-		return aesKeyGen.GenerateKey();
-	}
-
-	public static (RsaKeyParameters, RsaKeyParameters) GenerateRsaKey(string privateKeyFile = "private_key.pem", string publicKeyFile = "public_key.pem") {
-		RsaKeyPairGenerator rsaGenerator = new ();
-		rsaGenerator.Init(new RsaKeyGenerationParameters(RsaKeyExponent, new SecureRandom(), 2048, 80));
-			
-		AsymmetricCipherKeyPair keyPair = rsaGenerator.GenerateKeyPair();
-
-		RsaKeyParameters privateKey = (RsaKeyParameters) keyPair.Private;
-		RsaKeyParameters publicKey = (RsaKeyParameters) keyPair.Public;
-			
-		// Write private and public keys to files
-		using (TextWriter textWriter = new StreamWriter(privateKeyFile)) {
-			PemWriter pemWriter = new (textWriter);
-			pemWriter.WriteObject(privateKey);
-			pemWriter.Writer.Flush();
-		}
-
-		using (TextWriter textWriter = new StreamWriter(publicKeyFile)) {
-			PemWriter pemWriter = new (textWriter);
-			pemWriter.WriteObject(publicKey);
-			pemWriter.Writer.Flush();
-		}
-		
-		return (privateKey, publicKey);
 	}
 
 	public static (RsaKeyParameters, RsaKeyParameters) ImportRsaKey(string file) {
@@ -211,40 +94,10 @@ public static class Cryptography {
 			privateKey = (RsaKeyParameters) ((AsymmetricCipherKeyPair) pemReader.ReadObject()).Private;
 		}
 
-		return (privateKey, new RsaKeyParameters(false, privateKey.Modulus, RsaKeyExponent));
+		return (privateKey, new RsaKeyParameters(false, privateKey.Modulus, RsaCryptography.RsaKeyExponent));
 	}
 	
 	public static string Md5Hash(string input) => MD5.HashData(Encoding.Default.GetBytes(input)).Aggregate(new StringBuilder(), (sb, cur) => sb.Append(cur.ToString("x2"))).ToString();
-	
-	public static string Sign(string text, RsaKeyParameters privateKey) {
-		byte[] bytes = Encoding.UTF8.GetBytes(text);
-		RsaDigestSigner signer = new (new Sha256Digest());
-		signer.Init(true, privateKey);
-		
-		signer.BlockUpdate(bytes, 0, bytes.Length);
-		byte[] signature = signer.GenerateSignature();
-
-		return Convert.ToBase64String(signature);
-	}
-
-	public static bool Verify(string text, string signature, RsaKeyParameters? personalPublicKey, RsaKeyParameters? foreignPublicKey, bool isOwnMessage) {
-		switch (isOwnMessage) {
-			case true when personalPublicKey == null:
-				throw new ArgumentNullException(nameof(personalPublicKey), "must not be null when verifying own messages");
-			case false when foreignPublicKey == null:
-				throw new ArgumentNullException(nameof(foreignPublicKey), "must not be null when verifying other's messages");
-		}
-		
-		byte[] textBytes = Encoding.UTF8.GetBytes(text);
-		byte[] signatureBytes = Convert.FromBase64String(signature);
-
-		RsaDigestSigner verifier = new (new Sha256Digest());
-		verifier.Init(false, isOwnMessage ? personalPublicKey : foreignPublicKey);
-		
-		verifier.BlockUpdate(textBytes, 0, textBytes.Length);
-
-		return verifier.VerifySignature(signatureBytes);
-	}
 	
 	// Here we get the more specific methods
 	
@@ -252,7 +105,7 @@ public static class Cryptography {
 		// Decrypt the AES key using RSA
 		byte[] aesKeyEncrypted = Convert.FromBase64String(isOwnMessage ? message.SenderEncryptedKey : message.ReceiverEncryptedKey);
 		
-		byte[] aesKey = DecryptAesKey(aesKeyEncrypted, privateKey);
+		byte[] aesKey = DecryptAesKeyWithRsa(aesKeyEncrypted, privateKey);
 		
 		// Decrypt the message using AES
 		byte[] plainBytes = DecryptWithAes(Convert.FromBase64String(message.Body), aesKey);
@@ -277,9 +130,9 @@ public static class Cryptography {
 		byte[] cipherBytes = EncryptWithAes(plainBytes, plainBytes.Length, aesKey);
 		
 		// Encrypt the AES key using RSA
-		byte[] personalEncryptedKey = EncryptAesKey(aesKey, personalPublicKey);
+		byte[] personalEncryptedKey = EncryptAesKeyWithRsa(aesKey, personalPublicKey);
 		
-		byte[] foreignEncryptedKey = EncryptAesKey(aesKey, foreignPublicKey);
+		byte[] foreignEncryptedKey = EncryptAesKeyWithRsa(aesKey, foreignPublicKey);
 
 		long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 		return new Message {
@@ -287,7 +140,7 @@ public static class Cryptography {
 			SenderEncryptedKey = Convert.ToBase64String(personalEncryptedKey),
 			ReceiverEncryptedKey = Convert.ToBase64String(foreignEncryptedKey),
 			Timestamp = timestamp,
-			Signature = Sign(inputText + Convert.ToBase64String(aesKey) + foreignPublicKey.ToBase64String() + timestamp, privateKey),
+			Signature = RsaCryptography.Sign(inputText + Convert.ToBase64String(aesKey) + foreignPublicKey.ToBase64String() + timestamp, privateKey),
 			Sender = personalPublicKey,
 			SenderDisplayName = ""
 		};

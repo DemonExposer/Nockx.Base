@@ -4,6 +4,7 @@
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
+#include <openssl/decoder.h>
 
 unsigned char generate_key(const char *key_type) {
 	OpenSSL_add_all_algorithms();
@@ -31,35 +32,31 @@ unsigned char generate_key(const char *key_type) {
 		fclose(file);
 		return 0;
 	}
+
 	fclose(file);
-
-	file = fopen((key_type_str + std::string("_public_key.pem")).c_str(), "w");
-	if (!file) {
-		perror("fopen");
-		return 0;
-	}
-
-	if (!PEM_write_PUBKEY(file, key)) {
-		fprintf(stderr, "Error writing public key:\n");
-		ERR_print_errors_fp(stderr);
-		fclose(file);
-		return 0;
-	}
-	fclose(file);
-
 	EVP_PKEY_free(key);
+
 	return 1;
 }
 
-unsigned char get_key_sizes_from_file(const char *file_name, int *key_type_name_size, int *public_key_size, int *private_key_size) {
-	FILE *file = fopen(file_name, "r");
-	if (!file) {
-		perror("fopen");
+unsigned char get_key_sizes_from_file(const char *file_name, const char *key_type, int *public_key_size, int *private_key_size) {
+	BIO *bio = BIO_new_file(file_name, "r");
+	if (!bio) {
+		fprintf(stderr, "Error opening private key file:\n");
+		ERR_print_errors_fp(stderr);
 		return 0;
 	}
 
-	EVP_PKEY *key = PEM_read_PrivateKey(file, nullptr, nullptr, nullptr);
-	fclose(file);
+	EVP_PKEY *key = nullptr;
+	EVP_PKEY *candidate = nullptr;
+	while ((candidate = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr)) != nullptr) {
+		if (strcmp(EVP_PKEY_get0_type_name(candidate), key_type) == 0) {
+			key = candidate;
+			break;
+		}
+		EVP_PKEY_free(candidate);
+	}
+
 	if (!key) {
 		fprintf(stderr, "Error reading key:\n");
 		ERR_print_errors_fp(stderr);
@@ -68,33 +65,102 @@ unsigned char get_key_sizes_from_file(const char *file_name, int *key_type_name_
 
 	*private_key_size = i2d_PrivateKey(key, nullptr);
 	*public_key_size = i2d_PUBKEY(key, nullptr);
-	*key_type_name_size = static_cast<int>(strlen(EVP_PKEY_get0_type_name(key)));
 	EVP_PKEY_free(key);
+	BIO_free(bio);
 
 	return 1;
 }
 
-unsigned char read_key_from_file(const char *file_name, char *key_type, unsigned char *public_key, unsigned char *private_key) {
-	FILE *file = fopen(file_name, "r");
-	if (!file) {
-		perror("fopen");
+unsigned char read_key_from_file(const char *file_name, const char *key_type, unsigned char *public_key, unsigned char *private_key) {
+	BIO *bio = BIO_new_file(file_name, "r");
+	if (!bio) {
+		fprintf(stderr, "Error opening private key file:\n");
+		ERR_print_errors_fp(stderr);
 		return 0;
 	}
 
-	EVP_PKEY *key = PEM_read_PrivateKey(file, nullptr, nullptr, nullptr);
-	fclose(file);
+	EVP_PKEY *key = nullptr;
+	EVP_PKEY *candidate = nullptr;
+	while ((candidate = PEM_read_bio_PrivateKey(bio, nullptr, nullptr, nullptr)) != nullptr) {
+		if (strcmp(EVP_PKEY_get0_type_name(candidate), key_type) == 0) {
+			key = candidate;
+			break;
+		}
+		EVP_PKEY_free(candidate);
+	}
+
 	if (!key) {
 		fprintf(stderr, "Error reading key:\n");
 		ERR_print_errors_fp(stderr);
 		return 0;
 	}
 
-	const char *name = EVP_PKEY_get0_type_name(key);
-	strcpy(key_type, name);
-
 	i2d_PrivateKey(key, &private_key);
 	i2d_PUBKEY(key, &public_key);
 	EVP_PKEY_free(key);
+	BIO_free(bio);
+
+	return 1;
+}
+
+unsigned char get_public_key_size_from_string(const char *input, const char *key_type, int *public_key_size) {
+	BIO *bio = BIO_new_mem_buf(input, static_cast<int>(strlen(input)));
+	if (!bio) {
+		fprintf(stderr, "Error creating buffer for public key string:\n");
+		ERR_print_errors_fp(stderr);
+		return 0;
+	}
+
+	EVP_PKEY *key = nullptr;
+	EVP_PKEY *candidate = nullptr;
+	while ((candidate = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr)) != nullptr) {
+		if (strcmp(EVP_PKEY_get0_type_name(candidate), key_type) == 0) {
+			key = candidate;
+			break;
+		}
+		EVP_PKEY_free(candidate);
+	}
+
+	if (!key) {
+		fprintf(stderr, "Error reading key:\n");
+		ERR_print_errors_fp(stderr);
+		return 0;
+	}
+
+	*public_key_size = i2d_PUBKEY(key, nullptr);
+	EVP_PKEY_free(key);
+	BIO_free(bio);
+
+	return 1;
+}
+
+unsigned char read_public_key_from_string(const char *input, const char *key_type, unsigned char *public_key) {
+	BIO *bio = BIO_new_mem_buf(input, static_cast<int>(strlen(input)));
+	if (!bio) {
+		fprintf(stderr, "Error creating buffer for public key string:\n");
+		ERR_print_errors_fp(stderr);
+		return 0;
+	}
+
+	EVP_PKEY *key = nullptr;
+	EVP_PKEY *candidate = nullptr;
+	while ((candidate = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr)) != nullptr) {
+		if (strcmp(EVP_PKEY_get0_type_name(candidate), key_type) == 0) {
+			key = candidate;
+			break;
+		}
+		EVP_PKEY_free(candidate);
+	}
+
+	if (!key) {
+		fprintf(stderr, "Error reading key:\n");
+		ERR_print_errors_fp(stderr);
+		return 0;
+	}
+
+	i2d_PUBKEY(key, &public_key);
+	EVP_PKEY_free(key);
+	BIO_free(bio);
 
 	return 1;
 }
@@ -111,12 +177,15 @@ unsigned char get_ciphertext_and_shared_secret_length(const unsigned char *publi
 	if (!ctx) {
 		fprintf(stderr, "Failed to create context:\n");
 		ERR_print_errors_fp(stderr);
+		EVP_PKEY_free(parsed_key);
 		return 0;
 	}
 
 	if (EVP_PKEY_encapsulate_init(ctx, nullptr) <= 0) {
 		fprintf(stderr, "Failed to initialize encapsulation:\n");
 		ERR_print_errors_fp(stderr);
+		EVP_PKEY_CTX_free(ctx);
+		EVP_PKEY_free(parsed_key);
 		return 0;
 	}
 
@@ -135,7 +204,7 @@ unsigned char get_ciphertext_and_shared_secret_length(const unsigned char *publi
 	return 1;
 }
 
-unsigned char encrypt_aes_key_with_ml_kem(const unsigned char *public_kem_key, unsigned int kem_key_size, const unsigned char *aes_key, unsigned char *wrapped_encrypted_aes_key, const unsigned int wrapped_encrypted_aes_key_length, const unsigned int shared_secret_length) {
+unsigned char encrypt_aes_key_with_ml_kem(const unsigned char *public_kem_key, const unsigned int kem_key_size, const unsigned char *aes_key, unsigned char *wrapped_encrypted_aes_key, const unsigned int wrapped_encrypted_aes_key_length, const unsigned int shared_secret_length) {
 	EVP_PKEY *parsed_key = d2i_PUBKEY(nullptr, &public_kem_key, kem_key_size);
 	if (!parsed_key) {
 		fprintf(stderr, "Failed to parse key:\n");
@@ -171,6 +240,8 @@ unsigned char encrypt_aes_key_with_ml_kem(const unsigned char *public_kem_key, u
 		ERR_print_errors_fp(stderr);
 		EVP_PKEY_CTX_free(ctx);
 		EVP_PKEY_free(parsed_key);
+		OPENSSL_free(ciphertext);
+		OPENSSL_free(shared_secret);
 		return 0;
 	}
 
@@ -178,6 +249,8 @@ unsigned char encrypt_aes_key_with_ml_kem(const unsigned char *public_kem_key, u
 		fprintf(stderr, "Ciphertext and shared secret length mismatch!\n");
 		EVP_PKEY_CTX_free(ctx);
 		EVP_PKEY_free(parsed_key);
+		OPENSSL_free(ciphertext);
+		OPENSSL_free(shared_secret);
 		return 0;
 	}
 
@@ -195,8 +268,13 @@ unsigned char encrypt_aes_key_with_ml_kem(const unsigned char *public_kem_key, u
 	return 1;
 }
 
-unsigned char decrypt_aes_key_with_ml_kem(const unsigned char *private_kem_key, const unsigned int kem_key_size, const unsigned char *ciphertext, const unsigned int ciphertext_length, unsigned char *decrypted_aes_key) {
-	EVP_PKEY *parsed_key = d2i_PrivateKey(OBJ_txt2nid("ML-KEM-768"), nullptr, &private_kem_key, kem_key_size);
+unsigned char decrypt_aes_key_with_ml_kem(const unsigned char *private_kem_key, uint64_t kem_key_size, const unsigned char *ciphertext, const unsigned int ciphertext_length, unsigned char *decrypted_aes_key) {
+	EVP_PKEY *parsed_key = nullptr;
+	OSSL_DECODER_CTX *dctx = OSSL_DECODER_CTX_new_for_pkey(&parsed_key, "DER", nullptr, "ML-KEM-768", OSSL_KEYMGMT_SELECT_PRIVATE_KEY, nullptr, nullptr);
+	size_t key_size_t = kem_key_size;
+	OSSL_DECODER_from_data(dctx, &private_kem_key, &key_size_t);
+	OSSL_DECODER_CTX_free(dctx);
+
 	if (!parsed_key) {
 		fprintf(stderr, "Failed to parse key:\n");
 		ERR_print_errors_fp(stderr);
@@ -248,8 +326,13 @@ unsigned char decrypt_aes_key_with_ml_kem(const unsigned char *private_kem_key, 
 	return 1;
 }
 
-unsigned char get_signature_size(const unsigned char *private_key, const int key_size, const unsigned char *data, unsigned long data_size, unsigned int *signature_size) {
-	EVP_PKEY *parsed_key = d2i_PrivateKey(OBJ_txt2nid("ML-DSA-65"), nullptr, &private_key, key_size);
+unsigned char get_signature_size(const unsigned char *private_key, const uint64_t key_size, const unsigned char *data, const uint64_t data_size, uint64_t *signature_size) {
+	EVP_PKEY *parsed_key = nullptr;
+	OSSL_DECODER_CTX *dctx = OSSL_DECODER_CTX_new_for_pkey(&parsed_key, "DER", nullptr, "ML-DSA-65", OSSL_KEYMGMT_SELECT_PRIVATE_KEY, nullptr, nullptr);
+	size_t key_size_t = key_size;
+	OSSL_DECODER_from_data(dctx, &private_key, &key_size_t);
+	OSSL_DECODER_CTX_free(dctx);
+
 	if (!parsed_key) {
 		fprintf(stderr, "Failed to parse key:\n");
 		ERR_print_errors_fp(stderr);
@@ -289,8 +372,13 @@ unsigned char get_signature_size(const unsigned char *private_key, const int key
 	return 1;
 }
 
-unsigned char sign_with_ml_dsa(const unsigned char *private_key, const int key_size, const unsigned char *data, const unsigned long data_size, unsigned char *signature, unsigned int *signature_size) {
-	EVP_PKEY *parsed_key = d2i_PrivateKey(OBJ_txt2nid("ML-DSA-65"), nullptr, &private_key, key_size);
+unsigned char sign_with_ml_dsa(const unsigned char *private_key, const uint64_t key_size, const unsigned char *data, const uint64_t data_size, unsigned char *signature, uint64_t *signature_size) {
+	EVP_PKEY *parsed_key = nullptr;
+	OSSL_DECODER_CTX *dctx = OSSL_DECODER_CTX_new_for_pkey(&parsed_key, "DER", nullptr, "ML-DSA-65", OSSL_KEYMGMT_SELECT_PRIVATE_KEY, nullptr, nullptr);
+	size_t key_size_t = key_size;
+	OSSL_DECODER_from_data(dctx, &private_key, &key_size_t);
+	OSSL_DECODER_CTX_free(dctx);
+
 	if (!parsed_key) {
 		fprintf(stderr, "Failed to parse key:\n");
 		ERR_print_errors_fp(stderr);
@@ -313,7 +401,8 @@ unsigned char sign_with_ml_dsa(const unsigned char *private_key, const int key_s
 		return 0;
 	}
 
-	if (EVP_DigestSign(ctx, signature, reinterpret_cast<size_t *>(signature_size), data, data_size) <= 0) {
+	size_t sig_size = *signature_size;
+	if (EVP_DigestSign(ctx, signature, &sig_size, data, data_size) <= 0) {
 		fprintf(stderr, "Failed to sign:\n");
 		ERR_print_errors_fp(stderr);
 		EVP_MD_CTX_free(ctx);
@@ -321,13 +410,15 @@ unsigned char sign_with_ml_dsa(const unsigned char *private_key, const int key_s
 		return 0;
 	}
 
+	*signature_size = sig_size;
+
 	EVP_MD_CTX_free(ctx);
 	EVP_PKEY_free(parsed_key);
 
 	return 1;
 }
 
-int verify_with_ml_dsa(const unsigned char *public_key, const int key_size, const unsigned char *data, unsigned long data_size, unsigned char *signature, unsigned int signature_size) {
+int verify_with_ml_dsa(const unsigned char *public_key, const int key_size, const unsigned char *data, const uint64_t data_size, const unsigned char *signature, const unsigned int signature_size) {
 	EVP_PKEY *parsed_key = d2i_PUBKEY(nullptr, &public_key, key_size);
 	if (!parsed_key) {
 		fprintf(stderr, "Failed to parse key:\n");

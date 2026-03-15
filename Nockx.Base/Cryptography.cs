@@ -61,7 +61,11 @@ public static class Cryptography {
 	
 	public static string SignWithRsa(string text, RsaKeyParameters privateKey) => RsaCryptography.Sign(text, privateKey);
 
-	public static bool VerifyWithRsa(string text, string signature, RsaKeyParameters? personalPublicKey, RsaKeyParameters? foreignPublicKey, bool isOwnMessage) => RsaCryptography.Verify(text, signature, personalPublicKey, foreignPublicKey, isOwnMessage);
+	public static bool VerifyWithRsa(string text, string signature, RsaKeyParameters publicKey) => RsaCryptography.Verify(text, signature, publicKey);
+
+	public static string SignWithMlDsa(string text, byte[] dsaPrivateKey) => Convert.ToBase64String(MlDsaCryptography.Sign(Encoding.UTF8.GetBytes(text), dsaPrivateKey));
+	
+	public static bool VerifyWithMlDsa(string text, string signature, byte[] dsaPublicKey) => MlDsaCryptography.Verify(Encoding.UTF8.GetBytes(text), Convert.FromBase64String(signature), dsaPublicKey);
 
 	public static byte[] EncryptBytes(byte[] input, RsaKeyParameters foreignRsaPublicKey, byte[] foreignKemPublicKey) {
 		byte[] aesKey = GenerateAesKey();

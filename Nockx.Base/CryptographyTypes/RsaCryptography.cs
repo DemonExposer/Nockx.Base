@@ -63,19 +63,12 @@ internal static class RsaCryptography {
 		return Convert.ToBase64String(signature);
 	}
 
-	public static bool Verify(string text, string signature, RsaKeyParameters? personalPublicKey, RsaKeyParameters? foreignPublicKey, bool isOwnMessage) {
-		switch (isOwnMessage) {
-			case true when personalPublicKey == null:
-				throw new ArgumentNullException(nameof(personalPublicKey), "must not be null when verifying own messages");
-			case false when foreignPublicKey == null:
-				throw new ArgumentNullException(nameof(foreignPublicKey), "must not be null when verifying other's messages");
-		}
-		
+	public static bool Verify(string text, string signature, RsaKeyParameters publicKey) {
 		byte[] textBytes = Encoding.UTF8.GetBytes(text);
 		byte[] signatureBytes = Convert.FromBase64String(signature);
 
 		RsaDigestSigner verifier = new (new Sha256Digest());
-		verifier.Init(false, isOwnMessage ? personalPublicKey : foreignPublicKey);
+		verifier.Init(false, publicKey);
 		
 		verifier.BlockUpdate(textBytes, 0, textBytes.Length);
 

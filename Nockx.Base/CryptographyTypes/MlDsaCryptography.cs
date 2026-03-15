@@ -3,10 +3,10 @@ using System.Runtime.InteropServices;
 namespace Nockx.Base.CryptographyTypes;
 
 internal static partial class MlDsaCryptography {
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial byte get_signature_size(byte *dsaPrivateKey, ulong keySize, byte *data, ulong dataSize, ulong *signatureSize);
 	
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial byte sign_with_ml_dsa(byte *dsaPrivateKey, ulong keySize, byte *data, ulong dataSize, byte *signature, ulong *signatureSize);
 
 	public static unsafe byte[] Sign(byte[] data, byte[] privateDsaKey) {
@@ -26,7 +26,7 @@ internal static partial class MlDsaCryptography {
 		}
 	}
 
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial int verify_with_ml_dsa(byte *dsaPublicKey, int keySize, byte *data, ulong dataSize, byte *signature, uint signatureSize);
 
 	public static unsafe bool Verify(byte[] data, byte[] signature, byte[] dsaPublicKey) {

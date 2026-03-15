@@ -3,15 +3,15 @@ using System.Runtime.InteropServices;
 namespace Nockx.Base.CryptographyTypes;
 
 internal static partial class MlKemCryptography {
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static partial byte generate_key([MarshalAs(UnmanagedType.LPStr)] string keyType);
 
 	public static bool GenerateKey(string keyType) => generate_key(keyType) != 0;
 	
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial byte get_key_sizes_from_file([MarshalAs(UnmanagedType.LPStr)] string fileName, [MarshalAs(UnmanagedType.LPStr)] string keyType, int *publicKeySize, int *privateKeySize);
 	
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial byte read_key_from_file([MarshalAs(UnmanagedType.LPStr)] string fileName, [MarshalAs(UnmanagedType.LPStr)] string keyType, byte *publicKey, byte *privateKey);
 
 	public static unsafe KeyPair ReadKeyFromFile(string fileName, string keyType) {
@@ -35,10 +35,10 @@ internal static partial class MlKemCryptography {
 		};
 	}
 
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial byte get_public_key_size_from_string([MarshalAs(UnmanagedType.LPStr)] string input, [MarshalAs(UnmanagedType.LPStr)] string keyType, int *publicKeySize);
 
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial byte read_public_key_from_string([MarshalAs(UnmanagedType.LPStr)] string input, [MarshalAs(UnmanagedType.LPStr)] string keyType, byte *publicKey);
 
 	public static unsafe byte[] ReadPublicKeyFromString(string input, string keyType) {
@@ -56,10 +56,10 @@ internal static partial class MlKemCryptography {
 		return publicKey;
 	}
 	
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial byte get_ciphertext_and_shared_secret_length(byte *kemPublicKey, uint kemKeySize, uint *ciphertextLength, uint *sharedSecretLength);
 
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial byte encrypt_aes_key_with_ml_kem(byte *kemPublicKey, uint kemKeySize, byte *aesKey, byte *wrappedEncryptedAesKey, uint wrappedEncryptedAesKeyLength, uint sharedSecretLength);
 
 	public static unsafe byte[] EncryptAesKey(byte[] aesKey, byte[] publicKemKey) {
@@ -80,7 +80,7 @@ internal static partial class MlKemCryptography {
 		return !isSuccessful ? throw new Exception("Could not encrypt AES key") : encryptedAesKey;
 	}
 	
-	[LibraryImport(Cryptography.CppLib)]
+	[LibraryImport("libnockx-base")]
 	private static unsafe partial byte decrypt_aes_key_with_ml_kem(byte *kemPrivateKey, ulong kemKeySize, byte *ciphertext, uint ciphertextLength, byte *decryptedAesKey);
 
 	public static unsafe byte[] DecryptAesKey(byte[] ciphertext, byte[] privateKemKey) {

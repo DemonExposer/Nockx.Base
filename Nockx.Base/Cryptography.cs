@@ -15,24 +15,26 @@ public static class Cryptography {
 	public const string MlKem768 = "ML-KEM-768";
 	public const string MlDsa65 = "ML-DSA-65";
 	public const string Rsa = "RSA";
-
-	internal const string CppLib = "libnockx-base";
 	
 	public const int AesKeyLength = 256;
 
-	static Cryptography() {
-		NativeLibrary.SetDllImportResolver(Assembly.GetExecutingAssembly(), (libName, assembly, searchPath) => {
-			if (libName == CppLib) {
-				if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-					return NativeLibrary.Load($"{CppLib}.dylib", assembly, searchPath);
-				if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-					return NativeLibrary.Load($"{CppLib}.dll", assembly, searchPath);
-				
-				return NativeLibrary.Load($"{CppLib}.so", assembly, searchPath);
-			}
-			
-			return IntPtr.Zero;
-		});
+	public static void GenerateCombinedKeyFile() {
+		if (File.Exists("private_key.pem"))
+			throw new InvalidOperationException("Private key file already exists");
+		
+		if (!GenerateKey(MlKem768) || !GenerateKey(MlDsa65))
+			throw new Exception("Key generation failed"); 
+		
+		GenerateRsaKey("private_rsa_key.pem", "public_rsa_key.pem");
+
+		File.AppendAllText("private_key.pem", File.ReadAllText($"{MlKem768.ToLowerInvariant()}_private_key.pem").Trim() + '\n');
+		File.AppendAllText("private_key.pem", File.ReadAllText($"{MlDsa65.ToLowerInvariant()}_private_key.pem").Trim() + '\n');
+		File.AppendAllText("private_key.pem", File.ReadAllText("private_rsa_key.pem"));
+		
+		File.Delete($"{MlKem768.ToLowerInvariant()}_private_key.pem");
+		File.Delete($"{MlDsa65.ToLowerInvariant()}_private_key.pem");
+		File.Delete("private_rsa_key.pem");
+		File.Delete("public_rsa_key.pem");
 	}
 	
 	public static bool GenerateKey(string keyType) => MlKemCryptography.GenerateKey(keyType);

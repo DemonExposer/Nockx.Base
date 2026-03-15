@@ -47,19 +47,6 @@ public static class Cryptography {
 	
 	public static byte[] DecryptAesKeyWithMlKem(byte[] ciphertext, byte[] privateKemKey) => MlKemCryptography.DecryptAesKey(ciphertext, privateKemKey);
 	
-	public static byte[] DecryptBytes(byte[] input, RsaKeyParameters privateKey) {
-		byte[] encryptedAesKey = new byte[AesKeyLength];
-		byte[] cipherBytes = new byte[input.Length - encryptedAesKey.Length];
-		
-		Buffer.BlockCopy(input, 0, encryptedAesKey, 0, encryptedAesKey.Length);
-		Buffer.BlockCopy(input, encryptedAesKey.Length, cipherBytes, 0, cipherBytes.Length);
-
-		byte[] aesKey = DecryptAesKeyWithRsa(encryptedAesKey, privateKey);
-		byte[] plainBytes = DecryptWithAes(cipherBytes, aesKey);
-		
-		return plainBytes;
-	}
-	
 	public static byte[] GenerateAesKey() => AesCryptography.GenerateKey();
 	
 	public static byte[] EncryptWithAes(byte[] data, int inputLength, byte[] aesKey) => AesCryptography.Encrypt(data, inputLength, aesKey);
@@ -76,17 +63,32 @@ public static class Cryptography {
 
 	public static bool VerifyWithRsa(string text, string signature, RsaKeyParameters? personalPublicKey, RsaKeyParameters? foreignPublicKey, bool isOwnMessage) => RsaCryptography.Verify(text, signature, personalPublicKey, foreignPublicKey, isOwnMessage);
 
-	public static byte[] EncryptBytes(byte[] input, RsaKeyParameters foreignPublicKey) {
+	public static byte[] EncryptBytes(byte[] input, RsaKeyParameters foreignRsaPublicKey, byte[] foreignKemPublicKey) {
 		byte[] aesKey = GenerateAesKey();
 
 		byte[] cipherBytes = EncryptWithAes(input, input.Length, aesKey);
-		byte[] encryptedAesKey = EncryptAesKeyWithRsa(aesKey, foreignPublicKey);
+		// TODO: passing the result of ml-kem too rsa leads to an error, because the ciphertext is too large. Just pass the encrypted aes key instead and put the ciphertext straight into the end result
+		byte[] encryptedAesKey = EncryptAesKeyWithMlKem(aesKey, foreignKemPublicKey);
+		byte[] doubleEncryptedAesKey = EncryptAesKeyWithRsa(encryptedAesKey, foreignRsaPublicKey);
 
-		byte[] output = new byte[encryptedAesKey.Length + cipherBytes.Length];
-		Buffer.BlockCopy(encryptedAesKey, 0, output, 0, encryptedAesKey.Length);
-		Buffer.BlockCopy(cipherBytes, 0, output, encryptedAesKey.Length, cipherBytes.Length);
+		byte[] output = new byte[doubleEncryptedAesKey.Length + cipherBytes.Length];
+		Buffer.BlockCopy(doubleEncryptedAesKey, 0, output, 0, doubleEncryptedAesKey.Length);
+		Buffer.BlockCopy(cipherBytes, 0, output, doubleEncryptedAesKey.Length, cipherBytes.Length);
 		
 		return output;
+	}
+	
+	public static byte[] DecryptBytes(byte[] input, RsaKeyParameters rsaPrivateKey, byte[] kemPrivateKey) {
+		byte[] encryptedAesKey = new byte[AesKeyLength];
+		byte[] cipherBytes = new byte[input.Length - encryptedAesKey.Length];
+		
+		Buffer.BlockCopy(input, 0, encryptedAesKey, 0, encryptedAesKey.Length);
+		Buffer.BlockCopy(input, encryptedAesKey.Length, cipherBytes, 0, cipherBytes.Length);
+
+		byte[] aesKey = DecryptAesKeyWithRsa(encryptedAesKey, rsaPrivateKey);
+		byte[] plainBytes = DecryptWithAes(cipherBytes, aesKey);
+		
+		return plainBytes;
 	}
 
 	public static (RsaKeyParameters, RsaKeyParameters) ImportRsaKey(string file) {

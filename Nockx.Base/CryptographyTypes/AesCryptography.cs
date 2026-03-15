@@ -10,7 +10,7 @@ namespace Nockx.Base.CryptographyTypes;
 internal static class AesCryptography {
 	public static byte[] GenerateKey() {
 		CipherKeyGenerator aesKeyGen = new ();
-		aesKeyGen.Init(new KeyGenerationParameters(new SecureRandom(), Cryptography.AesKeyLength));
+		aesKeyGen.Init(new KeyGenerationParameters(new SecureRandom(), Cryptography.AesKeyLength * 8));
 		return aesKeyGen.GenerateKey();
 	}
 	

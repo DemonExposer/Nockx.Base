@@ -1,5 +1,3 @@
-using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using Nockx.Base.ClassExtensions;
@@ -16,7 +14,9 @@ public static class Cryptography {
 	public const string MlDsa65 = "ML-DSA-65";
 	public const string Rsa = "RSA";
 	
-	public const int AesKeyLength = 256;
+	public const int AesKeyLength = 32;
+	public const int RsaKeyLength = 256;
+	public const int KemEncapsulationLength = 1088;
 
 	public static void GenerateCombinedKeyFile() {
 		if (File.Exists("private_key.pem"))
@@ -67,26 +67,30 @@ public static class Cryptography {
 		byte[] aesKey = GenerateAesKey();
 
 		byte[] cipherBytes = EncryptWithAes(input, input.Length, aesKey);
-		// TODO: passing the result of ml-kem too rsa leads to an error, because the ciphertext is too large. Just pass the encrypted aes key instead and put the ciphertext straight into the end result
 		byte[] encryptedAesKey = EncryptAesKeyWithMlKem(aesKey, foreignKemPublicKey);
-		byte[] doubleEncryptedAesKey = EncryptAesKeyWithRsa(encryptedAesKey, foreignRsaPublicKey);
+		byte[] doubleEncryptedAesKey = EncryptAesKeyWithRsa(encryptedAesKey[..AesKeyLength], foreignRsaPublicKey);
 
-		byte[] output = new byte[doubleEncryptedAesKey.Length + cipherBytes.Length];
+		byte[] output = new byte[doubleEncryptedAesKey.Length + encryptedAesKey.Length - AesKeyLength + cipherBytes.Length];
 		Buffer.BlockCopy(doubleEncryptedAesKey, 0, output, 0, doubleEncryptedAesKey.Length);
-		Buffer.BlockCopy(cipherBytes, 0, output, doubleEncryptedAesKey.Length, cipherBytes.Length);
+		Buffer.BlockCopy(encryptedAesKey, AesKeyLength, output, doubleEncryptedAesKey.Length, encryptedAesKey.Length - AesKeyLength);
+		Buffer.BlockCopy(cipherBytes, 0, output, doubleEncryptedAesKey.Length + encryptedAesKey.Length - AesKeyLength, cipherBytes.Length);
 		
 		return output;
 	}
 	
 	public static byte[] DecryptBytes(byte[] input, RsaKeyParameters rsaPrivateKey, byte[] kemPrivateKey) {
-		byte[] encryptedAesKey = new byte[AesKeyLength];
-		byte[] cipherBytes = new byte[input.Length - encryptedAesKey.Length];
+		byte[] doubleEncryptedAesKey = new byte[RsaKeyLength];
+		byte[] encryptedAesKey = new byte[AesKeyLength + KemEncapsulationLength];
+		byte[] cipherBytes = new byte[input.Length - doubleEncryptedAesKey.Length - KemEncapsulationLength];
 		
-		Buffer.BlockCopy(input, 0, encryptedAesKey, 0, encryptedAesKey.Length);
-		Buffer.BlockCopy(input, encryptedAesKey.Length, cipherBytes, 0, cipherBytes.Length);
+		Buffer.BlockCopy(input, 0, doubleEncryptedAesKey, 0, doubleEncryptedAesKey.Length);
+		Buffer.BlockCopy(input, doubleEncryptedAesKey.Length, encryptedAesKey, AesKeyLength, KemEncapsulationLength);
+		Buffer.BlockCopy(input, doubleEncryptedAesKey.Length + encryptedAesKey.Length - AesKeyLength, cipherBytes, 0, cipherBytes.Length);
 
-		byte[] aesKey = DecryptAesKeyWithRsa(encryptedAesKey, rsaPrivateKey);
-		byte[] plainBytes = DecryptWithAes(cipherBytes, aesKey);
+		byte[] singleDecryptedAesKey = DecryptAesKeyWithRsa(doubleEncryptedAesKey, rsaPrivateKey);
+		Buffer.BlockCopy(singleDecryptedAesKey, 0, encryptedAesKey, 0, AesKeyLength);
+		byte[] fullyDecryptedAesKey = DecryptAesKeyWithMlKem(encryptedAesKey, kemPrivateKey);
+		byte[] plainBytes = DecryptWithAes(cipherBytes, fullyDecryptedAesKey);
 		
 		return plainBytes;
 	}
@@ -119,16 +123,16 @@ public static class Cryptography {
 	}
 	
 	public static Message Encrypt(string inputText, RsaKeyParameters personalPublicKey, RsaKeyParameters foreignPublicKey, RsaKeyParameters privateKey, byte[]? aesKeyIn = null, byte[]? aesKeyOut = null) {
-		if (aesKeyIn != null && aesKeyIn.Length != AesKeyLength / 8)
-			throw new ArgumentException($"{nameof(aesKeyIn)} has to be of length {AesKeyLength / 8}", nameof(aesKeyIn));
+		if (aesKeyIn != null && aesKeyIn.Length != AesKeyLength)
+			throw new ArgumentException($"{nameof(aesKeyIn)} has to be of length {AesKeyLength}", nameof(aesKeyIn));
 		
-		if (aesKeyOut != null && aesKeyOut.Length != AesKeyLength / 8)
-			throw new ArgumentException($"{nameof(aesKeyOut)} has to be of length {AesKeyLength / 8}", nameof(aesKeyOut));
+		if (aesKeyOut != null && aesKeyOut.Length != AesKeyLength)
+			throw new ArgumentException($"{nameof(aesKeyOut)} has to be of length {AesKeyLength}", nameof(aesKeyOut));
 		
 		// Encrypt using AES
 		byte[] aesKey = aesKeyIn ?? GenerateAesKey();
 		if (aesKeyOut != null)
-			Buffer.BlockCopy(aesKey, 0, aesKeyOut, 0, AesKeyLength / 8);
+			Buffer.BlockCopy(aesKey, 0, aesKeyOut, 0, AesKeyLength);
 
 		byte[] plainBytes = Encoding.UTF8.GetBytes(inputText);
 		byte[] cipherBytes = EncryptWithAes(plainBytes, plainBytes.Length, aesKey);

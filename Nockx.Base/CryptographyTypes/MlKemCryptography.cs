@@ -70,7 +70,7 @@ internal static partial class MlKemCryptography {
 			if (get_ciphertext_and_shared_secret_length(kemKeyPointer, (uint) publicKemKey.Length, &ciphertextLength, &sharedSecretLength) == 0)
 				throw new Exception("Could not get output sizes");
 			
-			encryptedAesKey = new byte[32 + ciphertextLength];
+			encryptedAesKey = new byte[Cryptography.AesKeyLength + ciphertextLength];
 			
 			fixed (byte *aesKeyPointer = aesKey)
 				fixed (byte *encryptedAesKeyPointer = encryptedAesKey)
@@ -84,7 +84,7 @@ internal static partial class MlKemCryptography {
 	private static unsafe partial byte decrypt_aes_key_with_ml_kem(byte *kemPrivateKey, ulong kemKeySize, byte *ciphertext, uint ciphertextLength, byte *decryptedAesKey);
 
 	public static unsafe byte[] DecryptAesKey(byte[] ciphertext, byte[] privateKemKey) {
-		byte[] aesKey = new byte[32];
+		byte[] aesKey = new byte[Cryptography.AesKeyLength];
 		bool isSuccessful;
 		
 		fixed (byte *ciphertextPointer = ciphertext)

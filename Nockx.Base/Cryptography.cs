@@ -99,6 +99,13 @@ public static class Cryptography {
 		return plainBytes;
 	}
 
+	public static string Sign(string text, RsaKeyParameters rsaPrivateKey, byte[] dsaPrivateKey) => $"{SignWithRsa(text, rsaPrivateKey)}-{SignWithMlDsa(text, dsaPrivateKey)}";
+
+	public static bool Verify(string text, string signature, RsaKeyParameters rsaPublicKey, byte[] dsaPublicKey) {
+		string[] signatures = signature.Split('-');
+		return VerifyWithRsa(text, signatures[0], rsaPublicKey) && VerifyWithMlDsa(text, signatures[1], dsaPublicKey);
+	}
+
 	public static (RsaKeyParameters, RsaKeyParameters) ImportRsaKey(string file) {
 		RsaKeyParameters privateKey;
 		using (StreamReader reader = File.OpenText(file)) {

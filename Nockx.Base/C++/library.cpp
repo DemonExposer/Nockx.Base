@@ -1,6 +1,10 @@
 #include "library.h"
 
+#include <string>
 #include <vector>
+#include <algorithm>
+#include <cctype>
+
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -298,8 +302,8 @@ unsigned char decrypt_aes_key_with_ml_kem(const unsigned char *private_kem_key, 
 	}
 
 	size_t ss_length;
-	std::vector encrypted_aes_key(ciphertext, ciphertext + 32);
-	std::vector true_ciphertext(ciphertext + 32, ciphertext + ciphertext_length);
+	std::vector<unsigned char> encrypted_aes_key(ciphertext, ciphertext + 32);
+	std::vector<unsigned char> true_ciphertext(ciphertext + 32, ciphertext + ciphertext_length);
 	if (EVP_PKEY_decapsulate(ctx, nullptr, &ss_length, true_ciphertext.data(), true_ciphertext.size()) <= 0) {
 		fprintf(stderr, "Failed to decapsulate (size check):\n");
 		ERR_print_errors_fp(stderr);
